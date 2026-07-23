@@ -100,7 +100,8 @@ export default function Home() {
   const exportBase = `projuice-attribution-${year}-${String(month).padStart(2, "0")}`;
 
   return (
-    <main className="mx-auto max-w-[720px] px-4 py-10">
+    <main className="px-4 py-10">
+      <div className="mx-auto max-w-[720px]">
       <header className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900">New Customer Attribution</h1>
         <p className="mt-1 text-sm text-slate-500">
@@ -255,10 +256,11 @@ export default function Home() {
           {error}
         </div>
       )}
+      </div>
 
       {/* Results */}
       {result && (
-        <div className="mt-8 space-y-4">
+        <div className="mx-auto mt-8 max-w-[1200px] space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-slate-800">Results — {monthLabel}</h2>
             <div className="flex gap-2">
