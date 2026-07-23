@@ -1,0 +1,29 @@
+{
+  "name": "projuice-attribution-tool",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Internal tool that attributes new ProJuice customers to a marketing source using live WooCommerce order data.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "next": "^15.5.21",
+    "papaparse": "^5.4.1",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.4",
+    "@types/node": "^20.17.30",
+    "@types/papaparse": "^5.3.15",
+    "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.1.2",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^4.1.4",
+    "typescript": "^5.8.3"
+  }
+}
