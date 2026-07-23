@@ -36,7 +36,18 @@ Internal-only, single-user, no auth, no database. Everything is request/response
    first use — no migration step. Without a database, the attribution report still works; only
    the save/cohort features are disabled (with a clear message).
 
-3. **Run**
+4. **(Optional) Password-protect the site.** Set a single shared username + password as env
+   vars — the whole site (pages + API) is then gated by HTTP Basic Auth (`middleware.ts`):
+
+   ```
+   SITE_USER=projuice
+   SITE_PASSWORD=some-long-shared-password
+   ```
+
+   Set both to turn it on; leave them unset to disable the gate. The browser remembers the
+   login for the session, so it's entered once.
+
+5. **Run**
 
    ```bash
    npm run dev      # http://localhost:3000
