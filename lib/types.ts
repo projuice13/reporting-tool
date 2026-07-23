@@ -91,16 +91,17 @@ export interface AttributeResponse {
   nameOnlyCount: number;
   notFoundCount: number;
   ordersFetched: number;
-  /** Human-readable window description, e.g. "June 2026". */
-  monthLabel: string;
+  /** Human-readable window description, e.g. "1 Jun 2026 – 30 Jun 2026". */
+  rangeLabel: string;
   /** Whether any timezone note applies. */
   timezoneNote: string;
 }
 
 export interface AttributeRequest {
   customers: NewCustomer[];
-  year: number;
-  /** 1-12. */
-  month: number;
+  /** Inclusive start date, YYYY-MM-DD. */
+  from: string;
+  /** Inclusive end date, YYYY-MM-DD. */
+  to: string;
   statuses?: string[];
 }

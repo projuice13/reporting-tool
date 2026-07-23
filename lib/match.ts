@@ -108,10 +108,24 @@ function partialRatio(a: string, b: string): number {
   return best;
 }
 
-/** max(tokenSort, partial), 0-100. */
+/** max(tokenSort, partial), 0-100, robust to spacing differences. */
 export function similarity(a: string, b: string): number {
   if (!a || !b) return 0;
-  return Math.max(tokenSortRatio(a, b), partialRatio(a, b));
+  let best = Math.max(tokenSortRatio(a, b), partialRatio(a, b));
+
+  // Also compare with all whitespace removed, so spacing-only variants such as
+  // "Bio Reliance" vs "BioReliance" (or "Mooka Gelato" vs "MookaGelato") score
+  // as near-identical. The partial pass is length-guarded so a very short
+  // customer name can't trivially match as a substring of a longer order name.
+  const da = a.replace(/\s+/g, "");
+  const db = b.replace(/\s+/g, "");
+  if (da && db) {
+    best = Math.max(best, ratio(da, db));
+    if (Math.min(da.length, db.length) >= 5) {
+      best = Math.max(best, partialRatio(da, db));
+    }
+  }
+  return best;
 }
 
 // ---------------------------------------------------------------------------
@@ -149,13 +163,17 @@ function prepOrder(order: OrderLite): PreppedOrder {
   return { order, billingPostcode: bPost, shippingPostcode: sPost, candidates };
 }
 
+type ClaimKind = "postcode" | "postcode-mismatch" | "name-only";
+
 /** A single (customer, order) claim produced by the scoring pass. */
 interface Claim {
   customerIndex: number;
   order: OrderLite;
   score: number;
   exact: boolean;
+  /** True when the match needs human eyeballs (no postcode confirmation). */
   nameOnly: boolean;
+  kind: ClaimKind;
 }
 
 /**
@@ -188,14 +206,20 @@ function scoreClaim(
     const postcodeMatch =
       custPost === prepped.billingPostcode || custPost === prepped.shippingPostcode;
     if (postcodeMatch && best >= POSTCODE_THRESHOLD) {
-      return { customerIndex: custIdx, order: prepped.order, score: best, exact, nameOnly: false };
+      return { customerIndex: custIdx, order: prepped.order, score: best, exact, nameOnly: false, kind: "postcode" };
+    }
+    // Wider net: the postcode doesn't line up (customer moved, billing vs
+    // delivery postcode differ, or an accounting typo) but the company/name is
+    // a near-exact match. Accept it, flagged for verification.
+    if (best >= NAME_ONLY_THRESHOLD) {
+      return { customerIndex: custIdx, order: prepped.order, score: best, exact, nameOnly: true, kind: "postcode-mismatch" };
     }
     return null;
   }
 
   // No postcode: stricter, name-only.
   if (best >= NAME_ONLY_THRESHOLD) {
-    return { customerIndex: custIdx, order: prepped.order, score: best, exact, nameOnly: true };
+    return { customerIndex: custIdx, order: prepped.order, score: best, exact, nameOnly: true, kind: "name-only" };
   }
   return null;
 }
@@ -277,8 +301,8 @@ export function matchCustomers(
         status: "NOT_FOUND",
         allOrders: [],
         notes: customer.postcode
-          ? "No order in this month matched this postcode + name."
-          : "No order in this month matched this name (blank postcode).",
+          ? "No order in this period matched this postcode or name."
+          : "No order in this period matched this name (blank postcode).",
       } satisfies AttributionRow;
     }
 
@@ -294,10 +318,12 @@ export function matchCustomers(
     );
 
     // Acquisition order = earliest matched order in the window. (WooCommerce
-    // core has no per-order "new customer" flag; for a month of newly-acquired
+    // core has no per-order "new customer" flag; for a set of newly-acquired
     // customers the earliest order is the acquisition order.)
     const acq = claims[0];
-    const nameOnly = claims.every((c) => c.nameOnly);
+    // The customer counts as confidently found if any of their orders matched
+    // on postcode + name; postcode-mismatch / name-only claims are flagged.
+    const hasConfident = claims.some((c) => !c.nameOnly);
 
     const allOrders: MatchedOrderRef[] = claims.map((c) => ({
       number: c.order.number,
@@ -307,15 +333,16 @@ export function matchCustomers(
     }));
 
     const notes: string[] = [];
-    if (nameOnly) notes.push("name-only — verify");
-    if (claims.length > 1) notes.push(`${claims.length} orders this month; showing first`);
+    if (acq.kind === "postcode-mismatch") notes.push("postcode differs — verify");
+    else if (acq.kind === "name-only") notes.push("name-only (blank postcode) — verify");
+    if (claims.length > 1) notes.push(`${claims.length} orders in period; showing first`);
 
     return {
       rowIndex: customer.rowIndex,
       company: customer.company,
       postcode: customer.postcode,
       amount: customer.amount,
-      status: nameOnly ? "NAME_ONLY" : "MATCHED",
+      status: hasConfident ? "MATCHED" : "NAME_ONLY",
       acqOrderNumber: acq.order.number,
       acqDate: formatDate(acq.order.dateCreated),
       attribution: acq.order.attribution.origin,

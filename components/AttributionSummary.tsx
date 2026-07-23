@@ -3,21 +3,21 @@
 import type { AttributeResponse } from "@/lib/types";
 
 export default function AttributionSummary({ data }: { data: AttributeResponse }) {
-  const { summary, matchedCount, nameOnlyCount, notFoundCount, totalCustomers, ordersFetched, monthLabel } = data;
+  const { summary, matchedCount, nameOnlyCount, notFoundCount, totalCustomers, ordersFetched, rangeLabel } = data;
 
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-4">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-base font-semibold text-slate-800">Attribution summary</h2>
         <span className="text-xs text-slate-500">
-          {monthLabel} · {ordersFetched} orders scanned
+          {rangeLabel} · {ordersFetched} orders scanned
         </span>
       </div>
 
       <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Stat label="Customers" value={totalCustomers} />
         <Stat label="Matched" value={matchedCount} tone="green" />
-        <Stat label="Name-only" value={nameOnlyCount} tone="amber" />
+        <Stat label="Needs verify" value={nameOnlyCount} tone="amber" />
         <Stat label="Not found" value={notFoundCount} tone="red" />
       </div>
 

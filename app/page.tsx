@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { parseCustomerCsv, CsvError, type ParseResult } from "@/lib/csv";
 import { exportCsv, exportXlsx } from "@/lib/export";
 import type { AttributeResponse } from "@/lib/types";
@@ -17,23 +17,24 @@ const ALL_STATUSES = [
   "failed",
 ];
 
-const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
+function ymd(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
-function previousMonth(): { year: number; month: number } {
+/** Default range = the whole previous calendar month. */
+function previousMonthRange(): { from: string; to: string } {
   const now = new Date();
-  const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  return { year: d.getFullYear(), month: d.getMonth() + 1 };
+  const first = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const last = new Date(now.getFullYear(), now.getMonth(), 0); // day 0 of this month = last day of prev
+  return { from: ymd(first), to: ymd(last) };
 }
 
 export default function Home() {
-  const prev = previousMonth();
+  const defaults = previousMonthRange();
   const [parsed, setParsed] = useState<ParseResult | null>(null);
   const [fileName, setFileName] = useState<string>("");
-  const [year, setYear] = useState<number>(prev.year);
-  const [month, setMonth] = useState<number>(prev.month);
+  const [from, setFrom] = useState<string>(defaults.from);
+  const [to, setTo] = useState<string>(defaults.to);
   const [statuses, setStatuses] = useState<string[]>(["processing", "completed"]);
   const [showStatuses, setShowStatuses] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -45,12 +46,7 @@ export default function Home() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const years = useMemo(() => {
-    const y = new Date().getFullYear();
-    return [y + 1, y, y - 1, y - 2, y - 3];
-  }, []);
-
-  const monthLabel = `${MONTHS[month - 1]} ${year}`;
+  const rangeInvalid = !from || !to || from > to;
 
   async function handleFile(file: File | undefined) {
     if (!file) return;
@@ -81,7 +77,7 @@ export default function Home() {
       const res = await fetch("/api/attribute", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ customers: parsed.customers, year, month, statuses }),
+        body: JSON.stringify({ customers: parsed.customers, from, to, statuses }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -96,8 +92,8 @@ export default function Home() {
     }
   }
 
-  const canRun = !!parsed && !loading;
-  const exportBase = `projuice-attribution-${year}-${String(month).padStart(2, "0")}`;
+  const canRun = !!parsed && !loading && !rangeInvalid;
+  const exportBase = `projuice-attribution-${from}_to_${to}`;
 
   return (
     <main className="px-4 py-10">
@@ -178,35 +174,27 @@ export default function Home() {
         </div>
       )}
 
-      {/* Month + status controls */}
+      {/* Date range + status controls */}
       <div className="mt-5 flex flex-wrap items-end gap-3">
         <label className="text-sm">
-          <span className="mb-1 block text-slate-600">Month</span>
-          <select
-            value={month}
-            onChange={(e) => setMonth(Number(e.target.value))}
+          <span className="mb-1 block text-slate-600">Date from</span>
+          <input
+            type="date"
+            value={from}
+            max={to || undefined}
+            onChange={(e) => setFrom(e.target.value)}
             className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-slate-900"
-          >
-            {MONTHS.map((m, i) => (
-              <option key={m} value={i + 1}>
-                {m}
-              </option>
-            ))}
-          </select>
+          />
         </label>
         <label className="text-sm">
-          <span className="mb-1 block text-slate-600">Year</span>
-          <select
-            value={year}
-            onChange={(e) => setYear(Number(e.target.value))}
+          <span className="mb-1 block text-slate-600">Date to</span>
+          <input
+            type="date"
+            value={to}
+            min={from || undefined}
+            onChange={(e) => setTo(e.target.value)}
             className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-slate-900"
-          >
-            {years.map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </select>
+          />
         </label>
 
         <button
@@ -217,13 +205,16 @@ export default function Home() {
         >
           {loading ? (
             <>
-              <Spinner /> Fetching {MONTHS[month - 1]} orders…
+              <Spinner /> Fetching orders…
             </>
           ) : (
             "Run attribution"
           )}
         </button>
       </div>
+      {rangeInvalid && (
+        <p className="mt-1 text-xs text-red-600">The “from” date must be on or before the “to” date.</p>
+      )}
 
       {/* Status filter (collapsed) */}
       <div className="mt-3">
@@ -262,7 +253,7 @@ export default function Home() {
       {result && (
         <div className="mx-auto mt-8 max-w-[1200px] space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-slate-800">Results — {monthLabel}</h2>
+            <h2 className="text-lg font-semibold text-slate-800">Results — {result.rangeLabel}</h2>
             <div className="flex gap-2">
               <button
                 type="button"

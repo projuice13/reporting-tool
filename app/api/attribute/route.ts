@@ -42,12 +42,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
   }
 
-  const { customers, year, month, statuses } = payload ?? {};
+  const { customers, from, to, statuses } = payload ?? {};
   if (!Array.isArray(customers) || customers.length === 0) {
     return NextResponse.json({ error: "No customers provided." }, { status: 400 });
   }
-  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
-    return NextResponse.json({ error: "A valid month and year are required." }, { status: 400 });
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  if (typeof from !== "string" || typeof to !== "string" || !DATE_RE.test(from) || !DATE_RE.test(to)) {
+    return NextResponse.json({ error: "A valid from and to date (YYYY-MM-DD) are required." }, { status: 400 });
+  }
+  if (from > to) {
+    return NextResponse.json({ error: "The 'from' date must be on or before the 'to' date." }, { status: 400 });
   }
 
   let cfg;
@@ -61,8 +65,8 @@ export async function POST(request: Request) {
   try {
     const { orders, window } = await fetchOrders(
       cfg,
-      year,
-      month,
+      from,
+      to,
       Array.isArray(statuses) ? statuses : []
     );
 
@@ -80,7 +84,7 @@ export async function POST(request: Request) {
       nameOnlyCount,
       notFoundCount,
       ordersFetched: orders.length,
-      monthLabel: window.label,
+      rangeLabel: window.label,
       timezoneNote:
         "Order dates are filtered as GMT; a possible 1-hour edge effect on the first/last day is immaterial for month-level attribution.",
     };

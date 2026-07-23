@@ -52,25 +52,43 @@ export function getConfig(): WooConfig {
 // Date window
 // ---------------------------------------------------------------------------
 
-/**
- * Build the [after, before) window for a given year + 1-based month.
- * Boundaries are emitted without a timezone offset, so the WooCommerce API
- * treats them as GMT. For month-level attribution the possible 1-hour edge
- * effect around midnight on the first/last day is immaterial (see brief §6).
- */
-export function monthWindow(year: number, month: number): { after: string; before: string; label: string } {
-  const mm = String(month).padStart(2, "0");
-  const after = `${year}-${mm}-01T00:00:00`;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-  const nextMonth = month === 12 ? 1 : month + 1;
-  const nextYear = month === 12 ? year + 1 : year;
-  const before = `${nextYear}-${String(nextMonth).padStart(2, "0")}-01T00:00:00`;
-
-  const label = new Date(`${after}Z`).toLocaleString("en-GB", {
-    month: "long",
+function fmtDay(ymd: string): string {
+  return new Date(`${ymd}T00:00:00Z`).toLocaleString("en-GB", {
+    day: "numeric",
+    month: "short",
     year: "numeric",
     timeZone: "UTC",
   });
+}
+
+/**
+ * Build the [after, before) window for an inclusive [from, to] date range
+ * (both YYYY-MM-DD). `before` is the day *after* `to`, so the `to` day is
+ * included. Boundaries are emitted without a timezone offset, so the
+ * WooCommerce API treats them as GMT — a possible 1-hour edge effect around
+ * midnight on the first/last day is immaterial for this reporting (brief §6).
+ */
+export function dateWindow(from: string, to: string): { after: string; before: string; label: string } {
+  if (!DATE_RE.test(from) || !DATE_RE.test(to)) {
+    throw new WooError("Dates must be in YYYY-MM-DD format.");
+  }
+  const start = new Date(`${from}T00:00:00Z`);
+  const end = new Date(`${to}T00:00:00Z`);
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+    throw new WooError("Invalid from/to date.");
+  }
+  if (start.getTime() > end.getTime()) {
+    throw new WooError("The 'from' date must be on or before the 'to' date.");
+  }
+
+  const after = `${from}T00:00:00`;
+  // Exclusive upper bound = to + 1 day, so the whole `to` day is included.
+  const beforeDate = new Date(end.getTime() + 24 * 60 * 60 * 1000);
+  const before = `${beforeDate.toISOString().slice(0, 10)}T00:00:00`;
+
+  const label = from === to ? fmtDay(from) : `${fmtDay(from)} – ${fmtDay(to)}`;
   return { after, before, label };
 }
 
@@ -132,14 +150,14 @@ async function fetchPage(
   throw new WooError(`Failed to fetch page ${page} after ${MAX_RETRIES} attempts.`);
 }
 
-/** Fetch every matching order for the month, across all pages. */
+/** Fetch every matching order in the date range, across all pages. */
 export async function fetchOrders(
   cfg: WooConfig,
-  year: number,
-  month: number,
+  from: string,
+  to: string,
   statuses: string[]
-): Promise<{ orders: OrderLite[]; window: ReturnType<typeof monthWindow> }> {
-  const window = monthWindow(year, month);
+): Promise<{ orders: OrderLite[]; window: ReturnType<typeof dateWindow> }> {
+  const window = dateWindow(from, to);
   const statusList = (statuses.length ? statuses : cfg.defaultStatuses).join(",");
 
   const baseParams: Record<string, string> = {

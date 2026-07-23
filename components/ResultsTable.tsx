@@ -8,7 +8,7 @@ type SortDir = "asc" | "desc";
 
 const STATUS_LABEL: Record<AttributionRow["status"], string> = {
   MATCHED: "Matched",
-  NAME_ONLY: "Name-only",
+  NAME_ONLY: "Verify",
   NOT_FOUND: "NOT FOUND",
 };
 

@@ -41,7 +41,7 @@ Internal-only, single-user, no auth, no database. Everything is request/response
 
 1. Upload the **New Customers CSV** (a `Company` column, a `Postcode` column, optionally
    `Amount`; BOM and blank trailing columns are handled). The tool auto-detects the columns.
-2. Pick a **month + year** (defaults to the previous calendar month).
+2. Pick a **date range** (from / to, inclusive; defaults to the previous calendar month).
 3. Optionally open **Order statuses** to change which statuses are included
    (default `processing` + `completed`).
 4. Click **Run attribution**. The server paginates all matching WooCommerce orders for the
@@ -60,8 +60,13 @@ Internal-only, single-user, no auth, no database. Everything is request/response
   - Normalise company/name (lowercase, strip punctuation, drop company suffixes) and postcode
     (uppercase, alphanumerics only).
   - Similarity = `max(tokenSortRatio, partialRatio)` on Levenshtein distance (0–100).
-  - **With a postcode:** match if postcode == billing **or** shipping postcode **and** best
-    company/name similarity ≥ **85**.
+  - Similarity is also computed with whitespace removed, so spacing-only variants
+    ("Bio Reliance" vs "BioReliance") score as near-identical.
+  - **With a matching postcode:** match if postcode == billing **or** shipping postcode **and**
+    best company/name similarity ≥ **85**.
+  - **Postcode differs:** if the postcode doesn't line up (customer moved, billing ≠ delivery,
+    or an accounting typo) but the name is a near-exact match ≥ **93**, it still matches, flagged
+    "postcode differs — verify". This is the main "wider net" that reduces false NOT FOUNDs.
   - **No postcode:** name/company similarity only, ≥ **93**, flagged "name-only — verify".
   - **Collision resolution:** an order claimed by two customers goes to the exact match, then
     the higher score; the loser becomes **NOT FOUND** (no false merges).
