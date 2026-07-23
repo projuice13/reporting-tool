@@ -1,6 +1,6 @@
 "use client";
 
-import type { AttributeResponse } from "@/lib/types";
+import type { SummaryLine } from "@/lib/types";
 
 const gbp = new Intl.NumberFormat("en-GB", {
   style: "currency",
@@ -9,8 +9,23 @@ const gbp = new Intl.NumberFormat("en-GB", {
   maximumFractionDigits: 2,
 });
 
-export default function AttributionSummary({ data }: { data: AttributeResponse }) {
-  const { summary, matchedCount, nameOnlyCount, notFoundCount, totalCustomers, ordersFetched, rangeLabel } = data;
+export default function AttributionSummary({
+  summary,
+  matchedCount,
+  nameOnlyCount,
+  notFoundCount,
+  totalCustomers,
+  ordersFetched,
+  rangeLabel,
+}: {
+  summary: SummaryLine[];
+  matchedCount: number;
+  nameOnlyCount: number;
+  notFoundCount: number;
+  totalCustomers: number;
+  ordersFetched: number;
+  rangeLabel: string;
+}) {
   const totalValue = summary.reduce((sum, l) => sum + l.value, 0);
 
   return (

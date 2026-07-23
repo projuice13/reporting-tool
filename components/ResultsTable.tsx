@@ -21,12 +21,15 @@ export default function ResultsTable({
   rows,
   edits,
   onEdit,
+  onRemove,
   attrOptions = [],
 }: {
   rows: AttributionRow[];
   /** When provided, the Attribution column becomes editable. */
   edits?: Record<number, RowEdit>;
   onEdit?: (rowIndex: number, patch: RowEdit) => void;
+  /** When provided, each row gets a remove (✕) action. */
+  onRemove?: (rowIndex: number) => void;
   attrOptions?: string[];
 }) {
   const [filter, setFilter] = useState("");
@@ -103,6 +106,7 @@ export default function ResultsTable({
               <Th label="Attribution" k="attribution" {...{ sortKey, sortDir, toggleSort }} />
               <th className="px-3 py-2 font-medium">All Orders</th>
               <th className="px-3 py-2 font-medium">Notes</th>
+              {onRemove && <th className="px-3 py-2 font-medium"></th>}
             </tr>
           </thead>
           <tbody>
@@ -162,12 +166,24 @@ export default function ResultsTable({
                     )}
                   </td>
                   <td className="px-3 py-2 text-xs text-slate-500">{r.notes}</td>
+                  {onRemove && (
+                    <td className="px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={() => onRemove(r.rowIndex)}
+                        className="text-xs text-slate-400 hover:text-red-600"
+                        title="Remove this customer from the report"
+                      >
+                        ✕
+                      </button>
+                    </td>
+                  )}
                 </tr>
               );
             })}
             {visible.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-3 py-8 text-center text-slate-400">
+                <td colSpan={onRemove ? 9 : 8} className="px-3 py-8 text-center text-slate-400">
                   No rows match the current filter.
                 </td>
               </tr>

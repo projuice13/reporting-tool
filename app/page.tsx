@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { parseCustomerCsv, CsvError, type ParseResult } from "@/lib/csv";
 import { exportCsv, exportXlsx } from "@/lib/export";
 import { ATTRIBUTION_PRESETS } from "@/lib/attribution";
-import type { AttributeResponse, ConfirmCustomer } from "@/lib/types";
+import { computeSummary } from "@/lib/summary";
+import type { AttributeResponse, AttributionRow, ConfirmCustomer } from "@/lib/types";
 import AttributionSummary from "@/components/AttributionSummary";
 import ResultsTable, { type RowEdit } from "@/components/ResultsTable";
 
@@ -48,6 +49,8 @@ export default function Home() {
 
   // Per-row attribution / email overrides, keyed by rowIndex.
   const [edits, setEdits] = useState<Record<number, RowEdit>>({});
+  // Rows the user has removed from the report (won't be shown or saved).
+  const [excluded, setExcluded] = useState<Set<number>>(new Set());
   const [confirming, setConfirming] = useState(false);
   const [confirmMsg, setConfirmMsg] = useState<string>("");
 
@@ -60,6 +63,11 @@ export default function Home() {
     setConfirmMsg("");
   }
 
+  function removeRow(rowIndex: number) {
+    setExcluded((cur) => new Set(cur).add(rowIndex));
+    setConfirmMsg("");
+  }
+
   const effectiveAttr = (rowIndex: number, detected?: string) =>
     (edits[rowIndex]?.attribution ?? detected ?? "").trim();
 
@@ -67,9 +75,20 @@ export default function Home() {
     ? Array.from(new Set([...ATTRIBUTION_PRESETS, ...result.rows.map((r) => r.attribution ?? "").filter(Boolean)]))
     : ATTRIBUTION_PRESETS;
 
-  const unattributed = result
-    ? result.rows.filter((r) => !effectiveAttr(r.rowIndex, r.attribution)).length
-    : 0;
+  // Rows still in play (not removed).
+  const visibleRows = useMemo<AttributionRow[]>(
+    () => (result ? result.rows.filter((r) => !excluded.has(r.rowIndex)) : []),
+    [result, excluded]
+  );
+
+  // Summary recomputed live from visible rows + their effective attribution.
+  const summaryData = useMemo(
+    () => computeSummary(visibleRows, (r) => effectiveAttr(r.rowIndex, r.attribution)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [visibleRows, edits]
+  );
+
+  const unattributed = visibleRows.filter((r) => !effectiveAttr(r.rowIndex, r.attribution)).length;
 
   async function handleFile(file: File | undefined) {
     if (!file) return;
@@ -97,6 +116,7 @@ export default function Home() {
     setError("");
     setResult(null);
     setEdits({});
+    setExcluded(new Set());
     setConfirmMsg("");
     try {
       const res = await fetch("/api/attribute", {
@@ -125,7 +145,7 @@ export default function Home() {
 
     const payload: ConfirmCustomer[] = [];
     let skipped = 0;
-    for (const r of result.rows) {
+    for (const r of visibleRows) {
       const attribution = effectiveAttr(r.rowIndex, r.attribution);
       if (!attribution) {
         skipped++;
@@ -348,14 +368,14 @@ export default function Home() {
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => exportCsv(result.rows, `${exportBase}.csv`)}
+                onClick={() => exportCsv(visibleRows, `${exportBase}.csv`)}
                 className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
               >
                 Export CSV
               </button>
               <button
                 type="button"
-                onClick={() => exportXlsx(result.rows, `${exportBase}.xlsx`)}
+                onClick={() => exportXlsx(visibleRows, `${exportBase}.xlsx`)}
                 className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
               >
                 Export XLSX
@@ -363,15 +383,24 @@ export default function Home() {
             </div>
           </div>
 
-          <AttributionSummary data={result} />
+          <AttributionSummary
+            summary={summaryData.summary}
+            matchedCount={summaryData.matchedCount}
+            nameOnlyCount={summaryData.nameOnlyCount}
+            notFoundCount={summaryData.notFoundCount}
+            totalCustomers={summaryData.totalCustomers}
+            ordersFetched={result.ordersFetched}
+            rangeLabel={result.rangeLabel}
+          />
 
           <p className="text-xs text-slate-500">
-            Review each attribution below — edit any of them, and for <span className="font-medium">NOT FOUND</span>{" "}
+            Review each attribution below — edit any of them, remove (✕) any you can't attribute, and for{" "}
+            <span className="font-medium">NOT FOUND</span>{" "}
             rows investigate and pick the source (add their email to track future spend). Then confirm to save this
             report into the cohort.
           </p>
 
-          <ResultsTable rows={result.rows} edits={edits} onEdit={editRow} attrOptions={attrOptions} />
+          <ResultsTable rows={visibleRows} edits={edits} onEdit={editRow} onRemove={removeRow} attrOptions={attrOptions} />
 
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-3">
             <div className="text-sm text-slate-600">
@@ -407,10 +436,15 @@ export default function Home() {
             </div>
           </div>
 
-          {result.notFoundCount > 0 && (
+          {(summaryData.notFoundCount > 0 || excluded.size > 0) && (
             <p className="text-xs text-slate-400">
-              {result.notFoundCount} customer{result.notFoundCount === 1 ? "" : "s"} not found in the website
-              orders for this period — they likely ordered via phone, a rep, or another channel.
+              {summaryData.notFoundCount > 0 && (
+                <>
+                  {summaryData.notFoundCount} customer{summaryData.notFoundCount === 1 ? "" : "s"} not found in the
+                  website orders for this period — they likely ordered via phone, a rep, or another channel.{" "}
+                </>
+              )}
+              {excluded.size > 0 && <>{excluded.size} removed from this report.</>}
             </p>
           )}
         </div>
