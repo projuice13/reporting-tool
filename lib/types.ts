@@ -67,6 +67,8 @@ export interface AttributionRow {
   /** Acquisition order number (the order whose attribution we report). */
   acqOrderNumber?: string;
   acqDate?: string;
+  /** Total value of the acquisition (first) order, numeric. */
+  acqTotal?: number;
   attribution?: string;
   /** All orders matched to this customer. */
   allOrders: MatchedOrderRef[];
@@ -79,6 +81,8 @@ export interface AttributionRow {
 export interface SummaryLine {
   label: string;
   count: number;
+  /** Summed value of the acquisition (first) orders in this bucket. */
+  value: number;
   /** Percentage of matched customers (0-100, one decimal). */
   percent: number;
 }

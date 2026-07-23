@@ -18,17 +18,21 @@ export const maxDuration = 60;
 
 function buildSummary(rows: AttributionRow[]): SummaryLine[] {
   const matched = rows.filter((r) => r.status !== "NOT_FOUND");
-  const counts = new Map<string, number>();
+  const buckets = new Map<string, { count: number; value: number }>();
   for (const r of matched) {
     const label = r.attribution || "Unknown";
-    counts.set(label, (counts.get(label) ?? 0) + 1);
+    const b = buckets.get(label) ?? { count: 0, value: 0 };
+    b.count += 1;
+    b.value += r.acqTotal ?? 0; // first order only
+    buckets.set(label, b);
   }
   const total = matched.length || 1;
-  const lines: SummaryLine[] = [...counts.entries()]
-    .map(([label, count]) => ({
+  const lines: SummaryLine[] = [...buckets.entries()]
+    .map(([label, b]) => ({
       label,
-      count,
-      percent: Math.round((count / total) * 1000) / 10,
+      count: b.count,
+      value: Math.round(b.value * 100) / 100,
+      percent: Math.round((b.count / total) * 1000) / 10,
     }))
     .sort((a, b) => b.count - a.count);
   return lines;

@@ -70,7 +70,10 @@ Internal-only, single-user, no auth, no database. Everything is request/response
   - **No postcode:** name/company similarity only, ≥ **93**, flagged "name-only — verify".
   - **Collision resolution:** an order claimed by two customers goes to the exact match, then
     the higher score; the loser becomes **NOT FOUND** (no false merges).
-  - Acquisition attribution comes from the customer's **earliest** matched order in the month.
+  - Acquisition attribution comes from the customer's **earliest** matched order in the range;
+    if they ordered more than once, only that first order counts (attribution **and** value).
+  - The summary panel shows, per source, the customer count, % of matched, and the summed
+    **£ value of those first orders**, plus a grand total.
   - Thresholds are named constants (`POSTCODE_THRESHOLD`, `NAME_ONLY_THRESHOLD`) — tune there.
 
 ## Notes / decisions

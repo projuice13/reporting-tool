@@ -2,8 +2,16 @@
 
 import type { AttributeResponse } from "@/lib/types";
 
+const gbp = new Intl.NumberFormat("en-GB", {
+  style: "currency",
+  currency: "GBP",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
 export default function AttributionSummary({ data }: { data: AttributeResponse }) {
   const { summary, matchedCount, nameOnlyCount, notFoundCount, totalCustomers, ordersFetched, rangeLabel } = data;
+  const totalValue = summary.reduce((sum, l) => sum + l.value, 0);
 
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-4">
@@ -26,13 +34,20 @@ export default function AttributionSummary({ data }: { data: AttributeResponse }
       ) : (
         <ul className="divide-y divide-slate-100">
           {summary.map((line) => (
-            <li key={line.label} className="flex items-center justify-between py-1.5 text-sm">
+            <li key={line.label} className="flex items-center justify-between gap-3 py-1.5 text-sm">
               <span className="text-slate-700">{line.label}</span>
               <span className="tabular-nums text-slate-500">
-                <span className="font-medium text-slate-800">{line.count}</span> · {line.percent}%
+                <span className="font-medium text-slate-800">{line.count}</span> · {line.percent}% ·{" "}
+                <span className="font-medium text-slate-800">{gbp.format(line.value)}</span>
               </span>
             </li>
           ))}
+          <li className="flex items-center justify-between gap-3 py-1.5 text-sm font-semibold text-slate-800">
+            <span>Total (first orders)</span>
+            <span className="tabular-nums">
+              {matchedCount + nameOnlyCount} · {gbp.format(totalValue)}
+            </span>
+          </li>
         </ul>
       )}
       <p className="mt-3 text-xs text-slate-400">

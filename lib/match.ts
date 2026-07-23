@@ -230,6 +230,12 @@ const DATE_FMT = new Intl.DateTimeFormat("en-GB", {
   day: "2-digit",
 });
 
+/** Parse a WooCommerce money string ("292.05", "1,625.16") to a number. */
+function parseMoney(v: string): number {
+  const n = parseFloat(String(v).replace(/[^0-9.-]/g, ""));
+  return isNaN(n) ? 0 : n;
+}
+
 function formatDate(iso: string): string {
   const d = new Date(iso);
   return isNaN(d.getTime()) ? iso : DATE_FMT.format(d);
@@ -345,6 +351,7 @@ export function matchCustomers(
       status: hasConfident ? "MATCHED" : "NAME_ONLY",
       acqOrderNumber: acq.order.number,
       acqDate: formatDate(acq.order.dateCreated),
+      acqTotal: parseMoney(acq.order.total),
       attribution: acq.order.attribution.origin,
       allOrders,
       score: Math.round(Math.max(...claims.map((c) => c.score))),
