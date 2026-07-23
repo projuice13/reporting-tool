@@ -6,17 +6,36 @@ import type { AttributionRow } from "@/lib/types";
 type SortKey = "company" | "postcode" | "status" | "acqOrderNumber" | "acqDate" | "attribution";
 type SortDir = "asc" | "desc";
 
+export interface RowEdit {
+  attribution?: string;
+  email?: string;
+}
+
 const STATUS_LABEL: Record<AttributionRow["status"], string> = {
   MATCHED: "Matched",
   NAME_ONLY: "Verify",
   NOT_FOUND: "NOT FOUND",
 };
 
-export default function ResultsTable({ rows }: { rows: AttributionRow[] }) {
+export default function ResultsTable({
+  rows,
+  edits,
+  onEdit,
+  attrOptions = [],
+}: {
+  rows: AttributionRow[];
+  /** When provided, the Attribution column becomes editable. */
+  edits?: Record<number, RowEdit>;
+  onEdit?: (rowIndex: number, patch: RowEdit) => void;
+  attrOptions?: string[];
+}) {
   const [filter, setFilter] = useState("");
   const [onlyUnmatched, setOnlyUnmatched] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("status");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const editable = !!onEdit;
+
+  const effAttr = (r: AttributionRow) => edits?.[r.rowIndex]?.attribution ?? r.attribution ?? "";
 
   const visible = useMemo(() => {
     const q = filter.trim().toLowerCase();
@@ -30,7 +49,6 @@ export default function ResultsTable({ rows }: { rows: AttributionRow[] }) {
         (r.acqOrderNumber ?? "").toLowerCase().includes(q)
       );
     });
-
     out = [...out].sort((a, b) => {
       const av = (a[sortKey] ?? "") as string;
       const bv = (b[sortKey] ?? "") as string;
@@ -41,9 +59,8 @@ export default function ResultsTable({ rows }: { rows: AttributionRow[] }) {
   }, [rows, filter, onlyUnmatched, sortKey, sortDir]);
 
   const toggleSort = (key: SortKey) => {
-    if (key === sortKey) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
+    if (key === sortKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
       setSortKey(key);
       setSortDir("asc");
     }
@@ -51,6 +68,12 @@ export default function ResultsTable({ rows }: { rows: AttributionRow[] }) {
 
   return (
     <section className="rounded-lg border border-slate-200 bg-white">
+      <datalist id="attr-options">
+        {attrOptions.map((o) => (
+          <option key={o} value={o} />
+        ))}
+      </datalist>
+
       <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 p-3">
         <input
           type="text"
@@ -60,12 +83,7 @@ export default function ResultsTable({ rows }: { rows: AttributionRow[] }) {
           className="min-w-0 flex-1 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none"
         />
         <label className="flex select-none items-center gap-2 text-sm text-slate-600">
-          <input
-            type="checkbox"
-            checked={onlyUnmatched}
-            onChange={(e) => setOnlyUnmatched(e.target.checked)}
-            className="h-4 w-4"
-          />
+          <input type="checkbox" checked={onlyUnmatched} onChange={(e) => setOnlyUnmatched(e.target.checked)} className="h-4 w-4" />
           Only unmatched
         </label>
         <span className="text-xs text-slate-400">
@@ -90,12 +108,11 @@ export default function ResultsTable({ rows }: { rows: AttributionRow[] }) {
           <tbody>
             {visible.map((r) => {
               const isNotFound = r.status === "NOT_FOUND";
+              const needsEmail = editable && !r.acqEmail; // no order identity → let user supply one
               return (
                 <tr
                   key={r.rowIndex}
-                  className={`border-b border-slate-100 align-top ${
-                    isNotFound ? "bg-yellow-200" : "hover:bg-slate-50"
-                  }`}
+                  className={`border-b border-slate-100 align-top ${isNotFound ? "bg-yellow-200" : "hover:bg-slate-50"}`}
                 >
                   <td className="px-3 py-2 font-medium text-slate-800">{r.company}</td>
                   <td className="px-3 py-2 tabular-nums text-slate-600">{r.postcode || "—"}</td>
@@ -104,7 +121,32 @@ export default function ResultsTable({ rows }: { rows: AttributionRow[] }) {
                   </td>
                   <td className="px-3 py-2 tabular-nums text-slate-600">{r.acqOrderNumber ?? "—"}</td>
                   <td className="px-3 py-2 whitespace-nowrap text-slate-600">{r.acqDate ?? "—"}</td>
-                  <td className="px-3 py-2 text-slate-700">{r.attribution ?? "—"}</td>
+                  <td className="px-3 py-2 text-slate-700">
+                    {editable ? (
+                      <div className="flex min-w-[180px] flex-col gap-1">
+                        <input
+                          list="attr-options"
+                          value={effAttr(r)}
+                          onChange={(e) => onEdit!(r.rowIndex, { attribution: e.target.value })}
+                          placeholder={isNotFound ? "Pick / type source…" : "attribution"}
+                          className={`rounded border px-2 py-1 text-sm ${
+                            effAttr(r) ? "border-slate-300" : "border-red-300 bg-red-50"
+                          }`}
+                        />
+                        {needsEmail && (
+                          <input
+                            type="email"
+                            value={edits?.[r.rowIndex]?.email ?? ""}
+                            onChange={(e) => onEdit!(r.rowIndex, { email: e.target.value })}
+                            placeholder="email (to track spend)"
+                            className="rounded border border-slate-300 px-2 py-1 text-xs"
+                          />
+                        )}
+                      </div>
+                    ) : (
+                      r.attribution ?? "—"
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-slate-500">
                     {r.allOrders.length === 0 ? (
                       "—"
@@ -153,11 +195,7 @@ function Th({
   const active = sortKey === k;
   return (
     <th className="px-3 py-2 font-medium">
-      <button
-        type="button"
-        onClick={() => toggleSort(k)}
-        className="flex items-center gap-1 uppercase tracking-wide hover:text-slate-700"
-      >
+      <button type="button" onClick={() => toggleSort(k)} className="flex items-center gap-1 uppercase tracking-wide hover:text-slate-700">
         {label}
         <span className="text-[10px]">{active ? (sortDir === "asc" ? "▲" : "▼") : "↕"}</span>
       </button>
@@ -171,9 +209,5 @@ function StatusPill({ status }: { status: AttributionRow["status"] }) {
     NAME_ONLY: "bg-amber-100 text-amber-800",
     NOT_FOUND: "bg-red-100 text-red-800",
   };
-  return (
-    <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${styles[status]}`}>
-      {STATUS_LABEL[status]}
-    </span>
-  );
+  return <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${styles[status]}`}>{STATUS_LABEL[status]}</span>;
 }

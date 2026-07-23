@@ -28,6 +28,8 @@ export interface OrderAttribution {
 export interface OrderLite {
   id: number;
   number: string;
+  /** WooCommerce customer id; 0 for guest orders. */
+  customerId: number;
   /** ISO date_created string as returned by the API. */
   dateCreated: string;
   billing: {
@@ -67,8 +69,13 @@ export interface AttributionRow {
   /** Acquisition order number (the order whose attribution we report). */
   acqOrderNumber?: string;
   acqDate?: string;
+  /** Raw ISO date of the acquisition order (for persistence / month math). */
+  acqDateIso?: string;
   /** Total value of the acquisition (first) order, numeric. */
   acqTotal?: number;
+  /** Billing email + WooCommerce customer id of the acquisition order (identity for tracking). */
+  acqEmail?: string;
+  acqCustomerId?: number;
   attribution?: string;
   /** All orders matched to this customer. */
   allOrders: MatchedOrderRef[];
@@ -108,4 +115,77 @@ export interface AttributeRequest {
   /** Inclusive end date, YYYY-MM-DD. */
   to: string;
   statuses?: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Cohort tracking (persisted)
+// ---------------------------------------------------------------------------
+
+/** One customer as sent to /api/cohort/confirm to be saved. */
+export interface ConfirmCustomer {
+  company: string;
+  postcode: string;
+  /** Billing email — the primary identity used to track future orders. */
+  email?: string;
+  wcCustomerId?: number;
+  /** The confirmed attribution (auto-detected or hand-picked). */
+  attribution: string;
+  attributionSource: "auto" | "manual";
+  acqOrderNumber?: string;
+  /** ISO date (YYYY-MM-DD) of the acquisition order, if known. */
+  acqDate?: string;
+  acqTotal?: number;
+  statusAtConfirm: MatchStatus;
+}
+
+export interface ConfirmRequest {
+  customers: ConfirmCustomer[];
+}
+
+/** A saved cohort customer with its latest spend snapshot. */
+export interface CohortCustomer {
+  id: number;
+  company: string;
+  postcode: string;
+  email: string | null;
+  wcCustomerId: number | null;
+  attribution: string;
+  attributionSource: "auto" | "manual";
+  acqOrderNumber: string | null;
+  acqDate: string | null; // YYYY-MM-DD
+  acqTotal: number | null;
+  statusAtConfirm: MatchStatus;
+  // Spend snapshot (null until first refresh):
+  totalSpend: number | null;
+  orderCount: number | null;
+  lastOrderDate: string | null;
+  spend6m: number | null;
+  spend12m: number | null;
+  spend18m: number | null;
+  avgMonthlySpend: number | null;
+  monthsTracked: number | null;
+  spendRefreshedAt: string | null;
+  createdAt: string;
+}
+
+/** Cohort value rolled up by attribution source. */
+export interface CohortSourceSummary {
+  attribution: string;
+  customers: number;
+  totalAcqValue: number;
+  totalSpend: number;
+  avgMonthlySpend: number;
+  avg6m: number;
+  avg12m: number;
+  avg18m: number;
+  /** How many customers have reached each tenure (denominator honesty). */
+  mature6m: number;
+  mature12m: number;
+  mature18m: number;
+}
+
+export interface CohortResponse {
+  customers: CohortCustomer[];
+  summary: CohortSourceSummary[];
+  spendRefreshedAt: string | null;
 }

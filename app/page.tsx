@@ -1,11 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useRef, useState } from "react";
 import { parseCustomerCsv, CsvError, type ParseResult } from "@/lib/csv";
 import { exportCsv, exportXlsx } from "@/lib/export";
-import type { AttributeResponse } from "@/lib/types";
+import { ATTRIBUTION_PRESETS } from "@/lib/attribution";
+import type { AttributeResponse, ConfirmCustomer } from "@/lib/types";
 import AttributionSummary from "@/components/AttributionSummary";
-import ResultsTable from "@/components/ResultsTable";
+import ResultsTable, { type RowEdit } from "@/components/ResultsTable";
 
 const ALL_STATUSES = [
   "processing",
@@ -44,9 +46,30 @@ export default function Home() {
   const [error, setError] = useState<string>("");
   const [result, setResult] = useState<AttributeResponse | null>(null);
 
+  // Per-row attribution / email overrides, keyed by rowIndex.
+  const [edits, setEdits] = useState<Record<number, RowEdit>>({});
+  const [confirming, setConfirming] = useState(false);
+  const [confirmMsg, setConfirmMsg] = useState<string>("");
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const rangeInvalid = !from || !to || from > to;
+
+  function editRow(rowIndex: number, patch: RowEdit) {
+    setEdits((cur) => ({ ...cur, [rowIndex]: { ...cur[rowIndex], ...patch } }));
+    setConfirmMsg("");
+  }
+
+  const effectiveAttr = (rowIndex: number, detected?: string) =>
+    (edits[rowIndex]?.attribution ?? detected ?? "").trim();
+
+  const attrOptions = result
+    ? Array.from(new Set([...ATTRIBUTION_PRESETS, ...result.rows.map((r) => r.attribution ?? "").filter(Boolean)]))
+    : ATTRIBUTION_PRESETS;
+
+  const unattributed = result
+    ? result.rows.filter((r) => !effectiveAttr(r.rowIndex, r.attribution)).length
+    : 0;
 
   async function handleFile(file: File | undefined) {
     if (!file) return;
@@ -73,6 +96,8 @@ export default function Home() {
     setLoading(true);
     setError("");
     setResult(null);
+    setEdits({});
+    setConfirmMsg("");
     try {
       const res = await fetch("/api/attribute", {
         method: "POST",
@@ -92,6 +117,64 @@ export default function Home() {
     }
   }
 
+  async function confirmReport() {
+    if (!result) return;
+    setConfirming(true);
+    setConfirmMsg("");
+    setError("");
+
+    const payload: ConfirmCustomer[] = [];
+    let skipped = 0;
+    for (const r of result.rows) {
+      const attribution = effectiveAttr(r.rowIndex, r.attribution);
+      if (!attribution) {
+        skipped++;
+        continue; // can't save without an attribution
+      }
+      const edited = edits[r.rowIndex]?.attribution?.trim();
+      const isManual = r.status === "NOT_FOUND" || (!!edited && edited !== (r.attribution ?? ""));
+      payload.push({
+        company: r.company,
+        postcode: r.postcode,
+        email: edits[r.rowIndex]?.email?.trim() || r.acqEmail,
+        wcCustomerId: r.acqCustomerId,
+        attribution,
+        attributionSource: isManual ? "manual" : "auto",
+        acqOrderNumber: r.acqOrderNumber,
+        acqDate: r.acqDateIso,
+        acqTotal: r.acqTotal,
+        statusAtConfirm: r.status,
+      });
+    }
+
+    if (payload.length === 0) {
+      setConfirmMsg("Nothing to save — every row needs an attribution first.");
+      setConfirming(false);
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/cohort/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customers: payload }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data?.error ?? `Save failed (${res.status}).`);
+        return;
+      }
+      setConfirmMsg(
+        `Saved ${data.saved} customer${data.saved === 1 ? "" : "s"} to the cohort` +
+          (skipped ? ` (${skipped} skipped — no attribution).` : ".")
+      );
+    } catch {
+      setError("Network error saving the cohort.");
+    } finally {
+      setConfirming(false);
+    }
+  }
+
   const canRun = !!parsed && !loading && !rangeInvalid;
   const exportBase = `projuice-attribution-${from}_to_${to}`;
 
@@ -99,10 +182,18 @@ export default function Home() {
     <main className="px-4 py-10">
       <div className="mx-auto max-w-[720px]">
       <header className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">New Customer Attribution</h1>
+        <div className="flex items-start justify-between gap-3">
+          <h1 className="text-2xl font-bold text-slate-900">New Customer Attribution</h1>
+          <Link
+            href="/cohort"
+            className="mt-1 whitespace-nowrap rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+          >
+            Cohort dashboard →
+          </Link>
+        </div>
         <p className="mt-1 text-sm text-slate-500">
-          Upload a new-customer CSV, pick a month, and match each customer to their WooCommerce
-          order to see how they were acquired.
+          Upload a new-customer CSV, pick a date range, and match each customer to their WooCommerce
+          order to see how they were acquired — then confirm to track their spend over time.
         </p>
       </header>
 
@@ -273,12 +364,53 @@ export default function Home() {
           </div>
 
           <AttributionSummary data={result} />
-          <ResultsTable rows={result.rows} />
+
+          <p className="text-xs text-slate-500">
+            Review each attribution below — edit any of them, and for <span className="font-medium">NOT FOUND</span>{" "}
+            rows investigate and pick the source (add their email to track future spend). Then confirm to save this
+            report into the cohort.
+          </p>
+
+          <ResultsTable rows={result.rows} edits={edits} onEdit={editRow} attrOptions={attrOptions} />
+
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-3">
+            <div className="text-sm text-slate-600">
+              {unattributed > 0 ? (
+                <span className="text-amber-700">
+                  {unattributed} row{unattributed === 1 ? "" : "s"} still need an attribution before they can be saved.
+                </span>
+              ) : (
+                <span>All rows have an attribution.</span>
+              )}
+              {confirmMsg && <span className="ml-2 font-medium text-green-700">{confirmMsg}</span>}
+            </div>
+            <div className="flex items-center gap-2">
+              {confirmMsg && (
+                <Link href="/cohort" className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
+                  View cohort →
+                </Link>
+              )}
+              <button
+                type="button"
+                onClick={confirmReport}
+                disabled={confirming}
+                className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {confirming ? (
+                  <>
+                    <Spinner /> Saving…
+                  </>
+                ) : (
+                  "Confirm & save report"
+                )}
+              </button>
+            </div>
+          </div>
 
           {result.notFoundCount > 0 && (
             <p className="text-xs text-slate-400">
-              {result.notFoundCount} customer{result.notFoundCount === 1 ? "" : "s"} not found in the
-              month’s website orders — they likely ordered via phone, a rep, or another channel.
+              {result.notFoundCount} customer{result.notFoundCount === 1 ? "" : "s"} not found in the website
+              orders for this period — they likely ordered via phone, a rep, or another channel.
             </p>
           )}
         </div>

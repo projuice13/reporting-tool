@@ -241,6 +241,17 @@ function formatDate(iso: string): string {
   return isNaN(d.getTime()) ? iso : DATE_FMT.format(d);
 }
 
+/** Best-effort YYYY-MM-DD from an order date (handles ISO and dd/mm/yyyy). */
+function isoDate(raw: string): string | undefined {
+  if (!raw) return undefined;
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const uk = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})/); // dd/mm/yyyy
+  if (uk) return `${uk[3]}-${uk[2]}-${uk[1]}`;
+  const d = new Date(raw);
+  return isNaN(d.getTime()) ? undefined : d.toISOString().slice(0, 10);
+}
+
 /**
  * Match every customer to WooCommerce orders and resolve collisions.
  * Returns one AttributionRow per customer, in input order.
@@ -351,7 +362,10 @@ export function matchCustomers(
       status: hasConfident ? "MATCHED" : "NAME_ONLY",
       acqOrderNumber: acq.order.number,
       acqDate: formatDate(acq.order.dateCreated),
+      acqDateIso: isoDate(acq.order.dateCreated),
       acqTotal: parseMoney(acq.order.total),
+      acqEmail: acq.order.billing.email || undefined,
+      acqCustomerId: acq.order.customerId || undefined,
       attribution: acq.order.attribution.origin,
       allOrders,
       score: Math.round(Math.max(...claims.map((c) => c.score))),

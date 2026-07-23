@@ -29,6 +29,13 @@ Internal-only, single-user, no auth, no database. Everything is request/response
 
    These are read **server-side only** and never reach the browser.
 
+3. **Provision the database** (for the cohort tracker). On Vercel: open the project →
+   **Storage** → **Create Database** → **Neon (Postgres)** → connect it. Vercel injects
+   `DATABASE_URL` automatically. For local dev, paste your Neon connection string into
+   `.env.local` as `DATABASE_URL`. The `cohort_customers` table is created automatically on
+   first use — no migration step. Without a database, the attribution report still works; only
+   the save/cohort features are disabled (with a clear message).
+
 3. **Run**
 
    ```bash
@@ -75,6 +82,28 @@ Internal-only, single-user, no auth, no database. Everything is request/response
   - The summary panel shows, per source, the customer count, % of matched, and the summed
     **£ value of those first orders**, plus a grand total.
   - Thresholds are named constants (`POSTCODE_THRESHOLD`, `NAME_ONLY_THRESHOLD`) — tune there.
+
+## Cohort tracking (persistent)
+
+Beyond the one-off report, the tool tracks the ongoing value of acquired customers:
+
+1. On the report, each row's **attribution is editable** (a dropdown of common sources + free
+   text). For **NOT FOUND** rows you investigate the source, pick it, and optionally add the
+   customer's **email** so their future orders can be tracked.
+2. **Confirm & save report** upserts every attributed row into the `cohort_customers` table,
+   keyed on the customer's email (or company+postcode if no email) so re-running a period never
+   duplicates them. Manual attributions are flagged as such.
+3. The **Cohort dashboard** (`/cohort`) shows every saved customer and, per acquisition source,
+   the customer count, acquisition value, total website spend, average monthly spend, and the
+   average spend reached by **6 / 12 / 18 months** of tenure (averaged only over customers old
+   enough to have reached that window).
+4. **Refresh spend** (manual) does one paginated sweep of WooCommerce orders from the earliest
+   acquisition date to today, attributes them to saved customers by email / customer id, and
+   recomputes every snapshot. Customers with no email/customer id are shown as "no identity"
+   (their website spend can't be tracked).
+
+Relevant files: `lib/db.ts` (Neon schema + queries), `lib/cohort.ts` (pure spend maths),
+`app/api/cohort/*` (confirm / read / refresh), `app/cohort/page.tsx` (dashboard).
 
 ## Notes / decisions
 

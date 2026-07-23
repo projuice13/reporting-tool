@@ -290,6 +290,7 @@ function mapOrder(raw: unknown): OrderLite {
   return {
     id: Number(o.id),
     number: str(o.number ?? o.id),
+    customerId: Number(o.customer_id ?? 0) || 0,
     dateCreated: str(o.date_created ?? o.date_created_gmt),
     billing: {
       company: str(billing.company),
