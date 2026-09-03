@@ -124,14 +124,27 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ customers: parsed.customers, from, to, statuses }),
       });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data?.error ?? `Request failed (${res.status}).`);
+
+      // Read as text first: server errors (timeouts, auth, crashes) may return
+      // HTML rather than JSON, which would otherwise throw and be mislabelled.
+      const raw = await res.text();
+      let data: AttributeResponse | { error?: string } | null = null;
+      try {
+        data = raw ? JSON.parse(raw) : null;
+      } catch {
+        /* non-JSON response */
+      }
+
+      if (!res.ok || !data || !("rows" in data)) {
+        setError(describeHttpError(res.status, data as { error?: string } | null, raw));
         return;
       }
       setResult(data as AttributeResponse);
-    } catch {
-      setError("Network error contacting the server.");
+    } catch (err) {
+      setError(
+        "Couldn't reach the server — check your connection and that the site is deployed. " +
+          (err instanceof Error ? `(${err.message})` : "")
+      );
     } finally {
       setLoading(false);
     }
@@ -451,6 +464,24 @@ export default function Home() {
       )}
     </main>
   );
+}
+
+/** Turn an HTTP failure into a specific, actionable message. */
+function describeHttpError(status: number, data: { error?: string } | null, raw: string): string {
+  if (data?.error) return data.error; // our own JSON error — use it verbatim
+  switch (status) {
+    case 401:
+      return "Login required (401). Refresh the page and sign in again.";
+    case 408:
+    case 504:
+      return "The request timed out fetching orders (504). Try a narrower date range or fewer order statuses.";
+    case 413:
+      return "The upload was too large for the server (413).";
+    case 500:
+      return "Server error (500) — likely a WooCommerce configuration or fetch problem. Check the env vars and Vercel logs.";
+    default:
+      return `Server returned ${status || "an unexpected response"}. ${raw.slice(0, 140)}`.trim();
+  }
 }
 
 function Spinner() {

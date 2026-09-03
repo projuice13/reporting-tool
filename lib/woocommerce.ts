@@ -167,6 +167,10 @@ export async function fetchOrders(
     per_page: String(PER_PAGE),
     orderby: "date",
     order: "asc",
+    // Only pull the fields we actually use — this drops line_items and other
+    // heavy data, cutting payload size and response time massively on big months
+    // (which is what otherwise causes function timeouts).
+    _fields: "id,number,customer_id,date_created,total,billing,shipping,meta_data",
   };
 
   // First page tells us how many pages there are.
