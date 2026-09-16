@@ -1,52 +1,44 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { SESSION_COOKIE, sessionToken, safeEqual } from "@/lib/auth";
 
-// Single global username/password for the whole site (pages + API), via HTTP
-// Basic Auth. Credentials come from env vars so they're never in the bundle:
+// Single shared password for the whole site (pages + API), enforced via a
+// signed session cookie. The password comes from an env var so it's never in
+// the bundle:
 //
-//   SITE_USER=projuice
 //   SITE_PASSWORD=some-long-shared-password
 //
-// If either is unset the gate is disabled (fail-open) so the site still works
-// before the vars are configured — set both to turn protection on.
+// If it's unset the gate is disabled (fail-open) so the site still works before
+// the var is configured — set it to turn protection on. Visitors without a
+// valid session cookie are sent to the /login page (API calls get a 401).
 
-/** Constant-time string compare (avoids leaking a match via timing). */
-function safeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let mismatch = 0;
-  for (let i = 0; i < a.length; i++) mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return mismatch === 0;
-}
-
-export function middleware(req: NextRequest) {
-  const user = process.env.SITE_USER;
+export async function middleware(req: NextRequest) {
   const pass = process.env.SITE_PASSWORD;
-  if (!user || !pass) return NextResponse.next(); // protection not configured
+  if (!pass) return NextResponse.next(); // protection not configured
 
-  const header = req.headers.get("authorization");
-  if (header) {
-    const [scheme, encoded] = header.split(" ");
-    if (scheme === "Basic" && encoded) {
-      let decoded = "";
-      try {
-        decoded = atob(encoded);
-      } catch {
-        decoded = "";
-      }
-      const sep = decoded.indexOf(":");
-      if (sep !== -1) {
-        const u = decoded.slice(0, sep);
-        const p = decoded.slice(sep + 1);
-        if (safeEqual(u, user) && safeEqual(p, pass)) {
-          return NextResponse.next();
-        }
-      }
-    }
+  const { pathname } = req.nextUrl;
+
+  // The login page and its API must be reachable while signed out.
+  if (pathname === "/login" || pathname === "/api/login") {
+    return NextResponse.next();
   }
 
-  return new NextResponse("Authentication required.", {
-    status: 401,
-    headers: { "WWW-Authenticate": 'Basic realm="ProJuice Attribution", charset="UTF-8"' },
-  });
+  const token = req.cookies.get(SESSION_COOKIE)?.value;
+  if (token) {
+    const expected = await sessionToken(pass);
+    if (safeEqual(token, expected)) return NextResponse.next();
+  }
+
+  // API routes get a machine-readable 401 rather than an HTML redirect.
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+  }
+
+  // Everything else goes to the login page, remembering where they were headed.
+  const url = req.nextUrl.clone();
+  url.pathname = "/login";
+  url.search = "";
+  url.searchParams.set("next", pathname + req.nextUrl.search);
+  return NextResponse.redirect(url);
 }
 
 // Protect everything except Next's static assets and the favicon.

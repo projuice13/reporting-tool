@@ -36,16 +36,16 @@ Internal-only, single-user, no auth, no database. Everything is request/response
    first use — no migration step. Without a database, the attribution report still works; only
    the save/cohort features are disabled (with a clear message).
 
-4. **(Optional) Password-protect the site.** Set a single shared username + password as env
-   vars — the whole site (pages + API) is then gated by HTTP Basic Auth (`middleware.ts`):
+4. **(Optional) Password-protect the site.** Set a single shared password as an env
+   var — the whole site (pages + API) is then gated by a `/login` page (`middleware.ts`):
 
    ```
-   SITE_USER=projuice
    SITE_PASSWORD=some-long-shared-password
    ```
 
-   Set both to turn it on; leave them unset to disable the gate. The browser remembers the
-   login for the session, so it's entered once.
+   Set it to turn protection on; leave it unset to disable the gate. Signing in on the
+   `/login` page sets an HttpOnly session cookie that lasts 30 days, so the password is
+   entered once. Changing `SITE_PASSWORD` invalidates existing sessions.
 
 5. **Run**
 

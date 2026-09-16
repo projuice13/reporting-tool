@@ -471,7 +471,7 @@ function describeHttpError(status: number, data: { error?: string } | null, raw:
   if (data?.error) return data.error; // our own JSON error — use it verbatim
   switch (status) {
     case 401:
-      return "Login required (401). Refresh the page and sign in again.";
+      return "Your session has expired (401). Refresh the page to sign in again.";
     case 408:
     case 504:
       return "The request timed out fetching orders (504). Try a narrower date range or fewer order statuses.";
