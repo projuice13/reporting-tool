@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import type { CohortResponse } from "@/lib/types";
+import LogoutButton from "@/components/LogoutButton";
 
 const gbp = new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 });
 const gbp2 = new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP", minimumFractionDigits: 2 });
@@ -92,6 +93,7 @@ export default function CohortPage() {
             >
               {refreshing ? "Refreshing…" : "Refresh spend"}
             </button>
+            <LogoutButton />
           </div>
         </header>
 

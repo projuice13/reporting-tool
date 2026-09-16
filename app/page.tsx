@@ -9,6 +9,7 @@ import { computeSummary } from "@/lib/summary";
 import type { AttributeResponse, AttributionRow, ConfirmCustomer } from "@/lib/types";
 import AttributionSummary from "@/components/AttributionSummary";
 import ResultsTable, { type RowEdit } from "@/components/ResultsTable";
+import LogoutButton from "@/components/LogoutButton";
 
 const ALL_STATUSES = [
   "processing",
@@ -217,12 +218,15 @@ export default function Home() {
       <header className="mb-6">
         <div className="flex items-start justify-between gap-3">
           <h1 className="text-2xl font-bold text-slate-900">New Customer Attribution</h1>
-          <Link
-            href="/cohort"
-            className="mt-1 whitespace-nowrap rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
-          >
-            Cohort dashboard →
-          </Link>
+          <div className="mt-1 flex gap-2">
+            <Link
+              href="/cohort"
+              className="whitespace-nowrap rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+            >
+              Cohort dashboard →
+            </Link>
+            <LogoutButton />
+          </div>
         </div>
         <p className="mt-1 text-sm text-slate-500">
           Upload a new-customer CSV, pick a date range, and match each customer to their WooCommerce
